@@ -758,7 +758,6 @@ $('#sentViz').classList.remove('hidden');
   $('#output-sent').scrollIntoView({ behavior: "smooth" });
 });
 
-// FREQUENCY TREEMAP
 $('#treemapForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   showLoading();
@@ -787,6 +786,10 @@ $('#treemapForm').addEventListener('submit', async function(e) {
   };
   const regex = REGEX_MAP[lang];
 
+  // ======== LOAD STOPWORDS HERE! ========
+  // Add stopword removal support
+  const stopwords = await getCombinedStopwords('#treemapForm', lang);
+
   let texts = [];
   const csvFile = $('#treemapCsvInput').files[0];
   const txtFile = $('#treemapTxtInput').files[0];
@@ -810,12 +813,14 @@ $('#treemapForm').addEventListener('submit', async function(e) {
     return;
   }
 
-  // Tokenize
+  // Tokenize & REMOVE STOPWORDS
   let tokens = [];
   texts.forEach(line => {
     const toks = line.match(regex) || [];
     tokens.push(...toks);
   });
+  // Remove stopwords
+  tokens = tokens.filter(tok => !stopwords.includes(tok));
 
   // Build n-grams
   let ngrams = [];
@@ -838,7 +843,7 @@ $('#treemapForm').addEventListener('submit', async function(e) {
     .slice(0, top_k);
 
   if (!topNgrams.length) {
-    $('#treemapResult').innerHTML = `<span class="text-red-600">No n-grams found in your data.</span>`;
+    $('#treemapResult').innerHTML = `<span class="text-red-600">No n-grams found in your data after stopword removal.</span>`;
     hideLoading();
     return;
   }

@@ -22,8 +22,8 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 
 # ───────── Directories & mappings ───────────────────────────────────
 ROOT          = os.path.abspath(os.path.dirname(__file__))
-FONT_DIR      = os.path.join(ROOT, "Font Styles Corpus")
-STOPWORD_DIR  = os.path.join(ROOT, "Stopwords Corpus")
+FONT_DIR      = os.path.join(ROOT, "./static/Font Styles Corpus")
+STOPWORD_DIR  = os.path.join(ROOT, "./static/Stopwords Corpus")
 DOWNLOAD_DIR  = os.path.join(ROOT, "tmp")          # for labelled CSVs
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
