@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BharatNLP Multilingual Workbench</title>
+  <!-- Tailwind CSS, Charting, PapaParse -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .output-annotation {
+      transition: opacity 0.3s;
+    }
+    .output-annotation.hidden {
+      opacity: 0;
+      pointer-events: none;
+      height: 0;
+      padding: 0;
+      margin: 0;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .output-grid {
+      background: linear-gradient(to right, #f3f4f6 1px, transparent 1px),
+                  linear-gradient(to bottom, #f3f4f6 1px, transparent 1px);
+      background-size: 30px 30px;
+    }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+  </style><style>
+/* ...your other styles... */
+::-webkit-scrollbar {
+  width: 12px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 6px;
+  background: linear-gradient(to bottom, #6fa0ef, #a21caf);
+  min-height: 24px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 #f3f4f6;
+}
+
+</style>
+
+</head>
+
+<body class="bg-gray-100 text-gray-800 h-screen overflow-hidden">
+<!-- Welcome Overlay -->
+<div id="welcomeOverlay"
+     class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 transition-opacity duration-500">
+  <div class="bg-white/90 rounded-2xl shadow-2xl px-8 py-8 max-w-lg w-full text-center border border-blue-200 relative">
+    <img src="{{ url_for('static', filename='images/BharatNLP.png') }}"
+         alt="Bharat NLP logo"
+         class="mx-auto rounded-lg" />
+    <h1 class="text-3xl font-bold text-blue-800 mb-2 tracking-tight">Multilingual NLP-Workbench</h1>
+    <p class="text-lg text-blue-700 mb-4 font-medium">Powerful NLP tools for Hindi, Marathi, Bengali, Tamil, and Telugu.</p>
+    <p class="text-gray-600 mb-4">
+      Analyze your text data using word clouds, topic modeling, sentiment analysis, n-gram and frequency treemaps – all in major Indian languages. <br>
+      <span class="block mt-3 text-sm text-blue-700">Developed by <b>Vartul Shrivastava</b> and <b>Prof. Dr. Shekhar Shukla</b></span>
+    </p>
+    <button id="welcomeProceedBtn"
+            class="mt-4 px-8 py-2 bg-gradient-to-r from-blue-500 via-blue-800 to-blue-500 text-white text-lg font-semibold rounded-full shadow-md hover:scale-105 transition-transform duration-200">Proceed</button>
+    <div class="mt-4 text-xs text-gray-400">
+      © 2024 BharatNLP
+    </div>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div id="loadingOverlay"
+     class="hidden fixed inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-50">
+  <div class="text-center">
+    <svg class="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" viewBox="0 0 24 24" fill="none">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+    </svg>
+    <p class="text-lg font-medium text-blue-700">Processing&hellip; please wait</p>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT: Horizontal flex, 3 sections -->
+<div class="h-screen flex">
+  <!-- === SECTION 1: SIDEBAR NAVIGATION === -->
+  <aside class="flex flex-col bg-white border-r shadow-md w-60 min-w-[180px] h-full py-6 px-3 space-y-6 hide-scrollbar overflow-y-auto">
+    <div class="flex flex-col items-center space-y-2">
+      <img src="{{ url_for('static', filename='images/BharatNLP.png') }}"
+           alt="Bharat NLP logo" class="h-16 w-auto rounded-md" />
+      <span class="text-xs text-gray-500">Multilingual NLP Workbench</span>
+    </div>
+    <nav class="flex-1 space-y-3">
+      <button id="menu-wc" class="nav-btn w-full flex flex-col items-start px-3 py-2 rounded-md bg-blue-600 text-white shadow-sm font-medium focus:outline-none focus:ring-2">
+        Word Cloud
+        <span class="text-xs font-normal text-blue-100 focus:outline-none focus:ring-2">See top words as a visual cloud.</span>
+      </button>
+      <button id="menu-tm" class="nav-btn w-full flex flex-col items-start px-3 py-2 rounded-md text-blue-700  font-medium focus:outline-none focus:ring-2">
+        Topic Modeling
+        <span class="text-xs font-normal text-blue-500 focus:outline-none focus:ring-2">Find hidden topics in your corpus.</span>
+      </button>
+      <button id="menu-sent" class="nav-btn w-full flex flex-col items-start px-3 py-2 rounded-md text-blue-700  font-medium focus:outline-none focus:ring-2">
+        Sentiment
+        <span class="text-xs font-normal text-blue-500 focus:outline-none focus:ring-2">Analyze text for sentiment labels.</span>
+      </button>
+      <button id="menu-treemap" class="nav-btn w-full flex flex-col items-start px-3 py-2 rounded-md text-blue-700  font-medium focus:outline-none focus:ring-2">
+        Frequency Treemap
+        <span class="text-xs font-normal text-blue-500 focus:outline-none focus:ring-2">Visualize token frequencies.</span>
+      </button>
+      <button id="menu-ngram" class="nav-btn w-full flex flex-col items-start px-3 py-2 rounded-md text-blue-700  font-medium focus:outline-none focus:ring-2">
+        N-gram Analysis
+        <span class="text-xs font-normal text-blue-500 focus:outline-none focus:ring-2">Discover most common phrases.</span>
+      </button>
+    </nav>
+    <div class="text-xs text-gray-400 text-center mt-4">© 2024 BharatNLP <br> Developed by Vartul Shrivastava and Prof. Dr. Shekhar Shukla</div>
+  </aside>
+  <!-- === SECTION 2: CONFIG PANEL (VERTICAL, SCROLLABLE) === -->
+  <section id="configSection" class="w-1/3 min-w-[260px] max-w-xl h-full overflow-y-auto bg-white px-8 py-8 shadow-md">
+
+    <!-- WORD CLOUD CONFIG (Default Active) -->
+    <div id="config-wc" class="panel active">
+      <h2 class="text-xl font-semibold text-blue-700 mb-4">Word Cloud: Configuration</h2>
+      <form id="wcForm" class="space-y-6" autocomplete="off">
+        <div>
+          <label class="block text-sm font-medium text-blue-700 mb-2">Text file</label>
+          <input type="file" name="text_file" required class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-blue-700 mb-2">Language</label>
+          <select name="language" required class="mt-1 block w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="hindi">Hindi</option>
+            <option value="marathi">Marathi</option>
+            <option value="bengali">Bengali</option>
+            <option value="tamil">Tamil</option>
+            <option value="telugu">Telugu</option>
+          </select>
+        </div>
+        <fieldset class="border border-gray-200 rounded-md p-4">
+          <legend class="text-sm font-medium text-blue-700 px-2">Custom stopwords</legend>
+          <div class="space-y-4 mt-2">
+            <div>
+              <label class="block text-sm text-gray-600">Upload file</label>
+              <input type="file" name="custom_stopwords_file" class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-600">Or paste (one per line)</label>
+              <textarea name="custom_stopwords_text" rows="3" class="block w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="आप&#10;पर&#10;में&#10;आदि"></textarea>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="border border-gray-200 rounded-md p-4">
+          <legend class="text-sm font-medium text-blue-700 px-2">Settings</legend>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+            <div>
+              <label class="block text-sm text-gray-600">Max words</label>
+              <input type="number" name="max_words" placeholder="200" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-600">Min font size</label>
+              <input type="number" name="min_font_size" placeholder="4" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <div class="col-span-full">
+              <label class="block text-sm text-gray-600 mb-1">Background</label>
+              <div class="flex items-center space-x-4">
+                <label class="inline-flex items-center">
+                  <input type="radio" name="background_color" value="white" checked class="form-radio text-blue-600">
+                  <span class="ml-2">White</span>
+                </label>
+                <label class="inline-flex items-center">
+                  <input type="radio" name="background_color" value="black" class="form-radio text-blue-600">
+                  <span class="ml-2">Black</span>
+                </label>
+                <label class="inline-flex items-center">
+                  <input type="radio" name="background_color" value="gray" class="form-radio text-blue-600">
+                  <span class="ml-2">Gray</span>
+                </label>
+                <input type="text" name="background_color_custom" placeholder="#f0f0f0" class="ml-4 flex-1 border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+              </div>
+            </div>
+            <div class="col-span-full">
+              <label class="block text-sm text-gray-600 mb-1">Colormap</label>
+              <div class="flex items-center space-x-4">
+                <label class="inline-flex items-center">
+                  <input type="radio" name="colormap" value="viridis" checked class="form-radio text-blue-600">
+                  <span class="ml-2">Viridis</span>
+                </label>
+                <label class="inline-flex items-center">
+                  <input type="radio" name="colormap" value="plasma" class="form-radio text-blue-600">
+                  <span class="ml-2">Plasma</span>
+                </label>
+                <label class="inline-flex items-center">
+                  <input type="radio" name="colormap" value="inferno" class="form-radio text-blue-600">
+                  <span class="ml-2">Inferno</span>
+                </label>
+                <label class="inline-flex items-center">
+                  <input type="radio" name="colormap" value="magma" class="form-radio text-blue-600">
+                  <span class="ml-2">Magma</span>
+                </label>
+              </div>
+            </div>
+            <div class="col-span-full">
+              <label class="inline-flex items-center text-sm">
+                <input type="checkbox" name="collocations" class="form-checkbox text-blue-600">
+                <span class="ml-2">Enable collocations</span>
+              </label>
+            </div>
+          </div>
+        </fieldset>
+        <div class="text-right">
+          <button type="submit" class="w-full px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Generate&nbsp;Word-Cloud</button>
+        </div>
+      </form>
+    </div>
+    <!-- TOPIC MODELING CONFIG -->
+    <div id="config-tm" class="panel">
+      <h2 class="text-xl font-semibold text-blue-700 mb-4">Topic Modeling: Configuration</h2>
+      <form id="tmForm" class="space-y-6" autocomplete="off">
+        <fieldset class="border border-gray-200 rounded-md p-4">
+          <legend class="text-sm font-medium text-blue-700 px-2">Upload CSV or text file</legend>
+          <div class="mt-2 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-blue-700 mb-2">CSV file</label>
+              <input type="file" name="csv_file" accept=".csv" id="tmCsvInput" class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-blue-700 mb-2">Text file</label>
+              <input type="file" name="text_file" id="tmTxtInput" class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+            <div id="tmCsvColWrap" class="hidden">
+              <label class="block text-sm font-medium text-blue-700 mb-2">CSV column</label>
+              <select name="csv_column" id="tmCsvCol" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400"></select>
+            </div>
+            <div id="tmColWarn" class="text-xs text-red-600 mt-1"></div>
+          </div>
+        </fieldset>
+        <fieldset class="border border-gray-200 rounded-md p-4">
+          <legend class="text-sm font-medium text-blue-700 px-2">Language</legend>
+          <select name="tm_language" required class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="hindi">Hindi</option>
+            <option value="marathi">Marathi</option>
+            <option value="bengali">Bengali</option>
+            <option value="tamil">Tamil</option>
+            <option value="telugu">Telugu</option>
+          </select>
+        </fieldset>
+        <fieldset class="border border-gray-200 rounded-md p-4">
+          <legend class="text-sm font-medium text-blue-700 px-2">Model parameters</legend>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+            <div>
+              <label class="block text-sm text-gray-600">Number of topics</label>
+              <input type="number" name="num_topics" placeholder="5" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-600">Passes (LDA)</label>
+              <input type="number" name="passes" placeholder="10" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-600">Min frequency</label>
+              <input type="number" name="min_freq" placeholder="5" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <div>
+              <label class="block text-sm text-gray-600">Max ratio (0-1)</label>
+              <input type="text" name="max_ratio" placeholder="0.8" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+          </div>
+        </fieldset>
+        <div class="mb-4 flex space-x-2">
+          <button type="button" class="tm-tab px-4 py-2 bg-blue-600 text-white rounded" data-model="lda">LDA</button>
+          <button type="button" class="tm-tab px-4 py-2 text-blue-600 hover:bg-blue-100 rounded-md" data-model="lsa">LSA</button>
+          <button type="button" class="tm-tab px-4 py-2 text-blue-600 hover:bg-blue-100 rounded-md" data-model="nmf">NMF</button>
+        </div>
+        <input type="hidden" name="model_type" id="tm-model-type" value="lda">
+        <input type="hidden" name="treemap" id="tm-treemap" value="false">
+        <div class="text-right space-x-2">
+          <button type="submit" class="px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Run model</button>
+        </div>
+        <fieldset class="border border-gray-200 rounded-md p-4 mt-4">
+          <legend class="text-sm font-medium text-blue-700 px-2">Coherence Tuning: Topic Number Range</legend>
+          <div class="flex items-center gap-4 mt-2">
+            <label class="text-sm text-gray-700">From</label>
+            <input type="number" id="topicRangeMin" value="2" min="2" class="border border-gray-300 rounded-md py-1 px-2 w-16">
+            <label class="text-sm text-gray-700">to</label>
+            <input type="number" id="topicRangeMax" value="10" min="2" class="border border-gray-300 rounded-md py-1 px-2 w-16">
+            <button type="button" id="findBestTopicsBtn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Find Best #Topics</button>
+          </div>
+          <div id="topicCoherencePlot" class="mt-6"></div>
+        </fieldset>
+      </form>
+    </div>
+    <!-- SENTIMENT ANALYSIS CONFIG -->
+    <div id="config-sent" class="panel">
+      <h2 class="text-xl font-semibold text-blue-700 mb-4">Sentiment Analysis: Configuration</h2>
+      <form id="sentForm" class="space-y-6" autocomplete="off">
+        <fieldset class="border border-gray-200 rounded-md p-4">
+          <legend class="text-sm font-medium text-blue-700 px-2">Upload CSV &amp; select text column</legend>
+          <div class="mt-2 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-blue-700 mb-2">CSV file</label>
+              <input type="file" name="sentiment_file" accept=".csv" id="sentCsvInput" required class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+            <div id="sentCsvColWrap" class="hidden">
+              <label class="block text-sm font-medium text-blue-700 mb-2">Text column name</label>
+              <select name="text_column" id="sentCsvCol" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400"></select>
+            </div>
+            <div id="sentColWarn" class="text-xs text-red-600 mt-1"></div>
+          </div>
+        </fieldset>
+        <div class="text-right">
+          <button type="submit" class="w-full px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Analyze</button>
+        </div>
+      </form>
+    </div>
+    <!-- FREQUENCY TREEMAP CONFIG -->
+<div id="config-treemap" class="panel">
+  <h2 class="text-xl font-semibold text-blue-700 mb-4">Frequency Treemap: Configuration</h2>
+  <form id="treemapForm" class="space-y-6" autocomplete="off">
+    <div>
+      <label class="block text-sm font-medium text-blue-700 mb-2">CSV file</label>
+      <input type="file" name="csv_file" accept=".csv" id="treemapCsvInput"
+        class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-blue-700 mb-2">Text file</label>
+      <input type="file" name="text_file" id="treemapTxtInput"
+        class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+    </div>
+    <div id="treemapCsvColWrap" class="hidden">
+      <label class="block text-sm font-medium text-blue-700 mb-2">CSV column</label>
+      <select name="csv_column" id="treemapCsvCol"
+        class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400"></select>
+    </div>
+    <div id="treemapColWarn" class="text-xs text-red-600 mt-1"></div>
+    <div>
+      <label class="block text-sm font-medium text-blue-700 mb-2">Language</label>
+      <select name="language" required
+        class="mt-1 block w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <option value="hindi">Hindi</option>
+        <option value="marathi">Marathi</option>
+        <option value="bengali">Bengali</option>
+        <option value="tamil">Tamil</option>
+        <option value="telugu">Telugu</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-blue-700 mb-2">N-gram size</label>
+      <input type="number" name="ngram_n" value="1" min="1" max="5"
+        class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-blue-700 mb-2">Top K tokens</label>
+      <input type="number" name="top_k" value="50" min="1" max="200"
+        class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-blue-700 mb-2">Color Scale</label>
+      <select name="color_scale"
+        class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <option value="Blues">Blues</option>
+        <option value="Viridis">Viridis</option>
+        <option value="Greens">Greens</option>
+        <option value="Oranges">Oranges</option>
+        <option value="Purples">Purples</option>
+        <option value="custom">Custom (hex)</option>
+      </select>
+      <input type="text" name="color_custom" placeholder="#4F46E5, #6366F1, #818CF8" 
+        class="mt-2 w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400 hidden" id="treemapCustomColorInput">
+      <small class="block text-xs text-gray-400 mt-1">For custom: comma-separated HEX (e.g. #1e3a8a,#3b82f6,#60a5fa)</small>
+    </div>
+    <div>
+      <label class="inline-flex items-center text-sm">
+        <input type="checkbox" name="export_png" class="form-checkbox text-blue-600">
+        <span class="ml-2">Allow export as PNG</span>
+      </label>
+    </div>
+    <div class="text-right">
+      <button type="submit" class="w-full px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        Generate Treemap
+      </button>
+    </div>
+  </form>
+</div>
+
+    <!-- N-GRAM ANALYSIS CONFIG -->
+    <div id="config-ngram" class="panel">
+      <h2 class="text-xl font-semibold text-blue-700 mb-4">N-gram Analysis: Configuration</h2>
+      <form id="ngramForm" class="space-y-6" autocomplete="off">
+        <div>
+          <label class="block text-sm font-medium text-blue-700 mb-2">CSV file</label>
+          <input type="file" name="csv_file" accept=".csv" id="ngramCsvInput" class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-blue-700 mb-2">Text file</label>
+          <input type="file" name="text_file" id="ngramTxtInput" class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+        </div>
+        <div id="ngramCsvColWrap" class="hidden">
+          <label class="block text-sm font-medium text-blue-700 mb-2">CSV column</label>
+          <select name="csv_column" id="ngramCsvCol" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400"></select>
+        </div>
+        <div id="ngramColWarn" class="text-xs text-red-600 mt-1"></div>
+        <div>
+          <label class="block text-sm font-medium text-blue-700 mb-2">Language</label>
+          <select name="language" required class="mt-1 block w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="hindi">Hindi</option>
+            <option value="marathi">Marathi</option>
+            <option value="bengali">Bengali</option>
+            <option value="tamil">Tamil</option>
+            <option value="telugu">Telugu</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-blue-700 mb-2">n-gram size</label>
+          <input type="number" name="ngram_n" value="2" min="1" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-blue-700 mb-2">Top K</label>
+          <input type="number" name="top_k" value="20" min="1" class="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-400">
+        </div>
+        <fieldset class="border border-gray-200 rounded-md p-4">
+  <legend class="text-sm font-medium text-blue-700 px-2">Custom stopwords</legend>
+  <div class="space-y-2 mt-2">
+    <label class="block text-sm text-gray-600">Upload file</label>
+    <input type="file" name="custom_stopwords_file" class="block w-full text-sm">
+    <label class="block text-sm text-gray-600">Or paste (one per line)</label>
+    <textarea name="custom_stopwords_text" rows="2" class="block w-full border border-gray-300 rounded-md py-2 px-3"></textarea>
+  </div>
+</fieldset>
+
+        <div class="text-right">
+          <button type="submit" class="w-full px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Generate N-gram Plot</button>
+        </div>
+      </form>
+    </div>
+  </section>
+  <!-- === SECTION 3: OUTPUT PANEL (VERTICAL, SCROLLABLE) === -->
+  <!-- === SECTION 3: OUTPUT PANEL (VERTICAL, SCROLLABLE) === -->
+  <section id="outputSection" class="flex-1 h-full overflow-y-auto bg-gray-50 px-6 py-8 output-grid">
+    <!-- Word Cloud Output -->
+    <div id="output-wc" class="panel active flex flex-col ">
+      <div class="output-annotation w-full max-w-xl bg-white/70 border border-dashed border-blue-300 rounded-xl p-6 mb-6 shadow-sm flex flex-row items-center gap-4">
+        <svg class="w-7 h-7 text-blue-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><text x="12" y="17" font-size="10" text-anchor="middle" fill="currentColor">WC</text></svg>
+        <div>
+          <div class="font-semibold text-blue-700 mb-0.5">Word Cloud Output</div>
+          <div class="text-sm text-gray-600">The generated word cloud will appear here after you upload your file and click "Generate".</div>
+        </div>
+      </div>
+      <img id="wcImage" src="" alt="Word cloud" class="max-w-full max-h-[70vh] rounded-lg shadow hidden">
+    </div>
+    <!-- Topic Modeling Output -->
+    <div id="output-tm" class="panel active flex flex-col ">
+      <div class="output-annotation w-full max-w-xl bg-white/70 border border-dashed border-purple-300 rounded-xl p-6 mb-6 shadow-sm flex flex-row items-center gap-4">
+        <svg class="w-7 h-7 text-purple-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4" /></svg>
+        <div>
+          <div class="font-semibold text-purple-700 mb-0.5">Topic Modeling Output</div>
+          <div class="text-sm text-gray-600">Extracted topics and coherence plots will appear here after model runs.</div>
+        </div>
+      </div>
+      <div id="tmResults" class="w-full"></div>
+      <div id="topicCoherencePlot" class="mt-6"></div>
+    </div>
+    <!-- Sentiment Analysis Output -->
+    <div id="output-sent" class="panel active flex flex-col ">
+      <div class="output-annotation w-full max-w-xl bg-white/70 border border-dashed border-pink-300 rounded-xl p-6 mb-6 shadow-sm flex flex-row items-center gap-4">
+        <svg class="w-7 h-7 text-pink-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 15c1.5-2 6.5-2 8 0"/><circle cx="9" cy="10" r="1"/><circle cx="15" cy="10" r="1"/></svg>
+        <div>
+          <div class="font-semibold text-pink-700 mb-0.5">Sentiment Analysis Output</div>
+          <div class="text-sm text-gray-600">You’ll see sentiment distribution and word clouds for each class after analysis.</div>
+        </div>
+      </div>
+      <div id="sentViz" class="flex flex-col items-center gap-8 w-full hidden">
+        <canvas id="sentBar" class="mb-8"></canvas>
+<div id="cloudWrap" class="flex flex-col items-center gap-4 w-full">
+  <div class="w-full max-w-xl flex flex-col items-center">
+    <img id="wcPos" class="hidden w-full h-auto rounded shadow" alt="Positive word cloud">
+  </div>
+  <div class="w-full max-w-xl flex flex-col items-center">
+    <img id="wcNeu" class="hidden w-full h-auto rounded shadow" alt="Neutral word cloud">
+  </div>
+  <div class="w-full max-w-xl flex flex-col items-center">
+    <img id="wcNeg" class="hidden w-full h-auto rounded shadow" alt="Negative word cloud">
+  </div>
+</div>
+
+      </div>
+      <a id="dlLink" class="hidden text-blue-700 underline mt-4 inline-block" download>Download labelled CSV</a>
+    </div>
+    <!-- Frequency Treemap Output -->
+    <div id="output-treemap" class="panel active flex flex-col ">
+      <div class="output-annotation w-full max-w-xl bg-white/70 border border-dashed border-green-300 rounded-xl p-6 mb-6 shadow-sm flex flex-row items-center gap-4">
+        <svg class="w-7 h-7 text-green-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="5" y="5" width="5" height="5"/><rect x="14" y="5" width="5" height="5"/><rect x="5" y="14" width="14" height="5"/></svg>
+        <div>
+          <div class="font-semibold text-green-700 mb-0.5">Treemap Output</div>
+          <div class="text-sm text-gray-600">Top N token or n-gram frequencies will be visualized as an interactive treemap.</div>
+        </div>
+      </div>
+      <div id="treemapResult" class="w-full"></div>
+    </div>
+    <!-- N-gram Analysis Output -->
+    <div id="output-ngram" class="panel active flex flex-col ">
+      <div class="output-annotation w-full max-w-xl bg-white/70 border border-dashed border-yellow-300 rounded-xl p-6 mb-6 shadow-sm flex flex-row items-center gap-4">
+        <svg class="w-7 h-7 text-yellow-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="4" rx="2"/></svg>
+        <div>
+          <div class="font-semibold text-yellow-700 mb-0.5">N-gram Analysis Output</div>
+          <div class="text-sm text-gray-600">Top n-grams will be shown as a horizontal bar chart after processing.</div>
+        </div>
+      </div>
+      <div id="ngramResult" class="w-full"></div>
+    </div>
+  </section>
+</div>
+
+</div> <!-- End of main flex container -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+  const overlay = document.getElementById('welcomeOverlay');
+  const btn = document.getElementById('welcomeProceedBtn');
+  if (overlay && btn) {
+    btn.onclick = function() {
+      overlay.classList.add('opacity-0');
+      setTimeout(() => overlay.style.display = "none", 500);
+      document.body.classList.remove('overflow-hidden');
+    };
+    // Block scroll while overlay is visible
+    document.body.classList.add('overflow-hidden');
+  }
+});
+const panelIds = ['wc', 'tm', 'sent', 'treemap', 'ngram'];
+function switchPanel(id) {
+  panelIds.forEach(p => {
+    document.getElementById('config-' + p).classList.toggle('active', p === id);
+    document.getElementById('output-' + p).classList.toggle('active', p === id);
+    const navBtn = document.getElementById('menu-' + p);
+    if (navBtn) {
+      navBtn.classList.toggle('bg-blue-600', p === id);
+      navBtn.classList.toggle('text-white', p === id);
+      navBtn.classList.toggle('text-blue-700', p !== id);
+      const descSpan = navBtn.querySelector('span.text-xs');
+      if (descSpan) {
+        descSpan.classList.toggle('text-white', p === id);
+        descSpan.classList.toggle('text-blue-500', p !== id);
+        descSpan.classList.remove('text-blue-100');
+      }
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  panelIds.forEach(p => {
+    const navBtn = document.getElementById('menu-' + p);
+    if (navBtn) navBtn.onclick = () => switchPanel(p);
+  });
+  $('#sentViz').classList.add('hidden');
+});
+
+// Loading
+const $ = sel => document.querySelector(sel);
+const showLoading = () => $('#loadingOverlay').classList.remove('hidden');
+const hideLoading = () => $('#loadingOverlay').classList.add('hidden');
+
+// CSV COLUMN DETECTION (same as before, just copy and use)
+async function getCsvColumns(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve([]);
+    Papa.parse(file, {
+      header: true,
+      preview: 1,
+      complete: results => {
+        if (results.meta && results.meta.fields) {
+          resolve(results.meta.fields.filter(Boolean));
+        } else {
+          resolve([]);
+        }
+      },
+      error: reject
+    });
+  });
+}
+
+function setupCsvColumnDetection(fileInputId, colWrapId, colSelectId) {
+  const fileInput = document.getElementById(fileInputId);
+  const colWrap = document.getElementById(colWrapId);
+  const colSelect = document.getElementById(colSelectId);
+  fileInput?.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (file) {
+      colWrap.classList.remove('hidden');
+      colSelect.innerHTML = `<option value="">Detecting...</option>`;
+      const fields = await getCsvColumns(file);
+      if (fields.length) {
+        colSelect.innerHTML = `<option value="">Select column</option>` +
+          fields.map(f => `<option value="${f}">${f}</option>`).join('');
+      } else {
+        colSelect.innerHTML = `<option value="">No columns detected</option>`;
+      }
+    } else {
+      colWrap.classList.add('hidden');
+      colSelect.innerHTML = '';
+    }
+  });
+}
+setupCsvColumnDetection('tmCsvInput',      'tmCsvColWrap',      'tmCsvCol');
+setupCsvColumnDetection('sentCsvInput',    'sentCsvColWrap',    'sentCsvCol');
+setupCsvColumnDetection('treemapCsvInput', 'treemapCsvColWrap', 'treemapCsvCol');
+setupCsvColumnDetection('ngramCsvInput',   'ngramCsvColWrap',   'ngramCsvCol');
+
+// Stopword utilities
+async function loadDefaultStopwords(lang) {
+  const url = `/static/Stopwords%20Corpus/${lang}_stopwords.txt`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return [];
+    const txt = await resp.text();
+    return txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+async function getCombinedStopwords(formSel, lang) {
+  const defaults = await loadDefaultStopwords(lang);
+  let userSw = [];
+  const ta = document.querySelector(`${formSel} textarea[name="custom_stopwords_text"]`);
+  if (ta && ta.value.trim()) userSw = userSw.concat(ta.value.trim().split(/\s*\n\s*/));
+  const fi = document.querySelector(`${formSel} input[name="custom_stopwords_file"]`);
+  if (fi && fi.files.length > 0) {
+    const fileText = await fi.files[0].text();
+    userSw = userSw.concat(fileText.split(/\s*\n\s*/));
+  }
+  return [...new Set([...defaults, ...userSw].map(w => w.trim()).filter(Boolean))];
+}
+</script>
+<script>
+
+
+// WORD CLOUD
+$('#wcForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  showLoading();
+  const res = await fetch('/generate', {
+    method: 'POST',
+    body: new FormData(e.target)
+  });
+  const js = await res.json();
+  hideLoading();
+  if (js.error) return alert(js.error);
+$('#wcImage').src = 'data:image/png;base64,' + js.img_data;
+$('#wcImage').classList.remove('hidden'); // <--- add this line
+switchPanel('wc');
+$('#output-wc').scrollIntoView({ behavior: "smooth" });
+
+});
+
+// TOPIC MODELING
+document.querySelectorAll('.tm-tab').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tm-tab').forEach(b => b.classList.remove('bg-blue-600','text-white'));
+    btn.classList.add('bg-blue-600','text-white');
+    $('#tm-model-type').value = btn.dataset.model;
+  };
+});
+$('#tmForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  showLoading();
+  if (!$('#tmCsvColWrap').classList.contains('hidden') && !$('#tmCsvCol').value) {
+    $('#tmColWarn').textContent = 'Please select a CSV column.'; hideLoading(); return;
+  }
+  $('#tmColWarn').textContent = '';
+  const formData = new FormData(e.target);
+  const res = await fetch('/topic_model', { method: 'POST', body: formData });
+  const js = await res.json();
+  hideLoading();
+  if (js.error) return alert(js.error);
+  const out = $('#tmResults'); out.innerHTML = '';
+  if (js.treemap) {
+    const img = document.createElement('img');
+    img.src = 'data:image/png;base64,' + js.treemap;
+    img.className = 'w-full h-auto rounded-lg shadow';
+    out.appendChild(img);
+  } else {
+    out.innerHTML += `<h2 class="text-xl font-semibold text-blue-700 mb-2">Coherence: ${js.coherence}</h2>`;
+    const ul = document.createElement('ul'); ul.className = 'list-disc ml-6';
+    js.topics.forEach(t => {
+      const li = document.createElement('li');
+      li.innerHTML = `<strong>Topic ${t.idx}:</strong> ${t.words}`;
+      ul.appendChild(li);
+    });
+    out.appendChild(ul);
+  }
+  switchPanel('tm');
+  $('#output-tm').scrollIntoView({ behavior: "smooth" });
+});
+
+// SENTIMENT
+let sentChart = null;
+$('#sentForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  showLoading();
+  if (!$('#sentCsvColWrap').classList.contains('hidden') && !$('#sentCsvCol').value) {
+    $('#sentColWarn').textContent = 'Please select a CSV column.'; hideLoading(); return;
+  }
+  $('#sentColWarn').textContent = '';
+  const res = await fetch('/sentiment', { method: 'POST', body: new FormData(e.target) });
+  const js = await res.json();
+  hideLoading();
+  if (js.error) return alert(js.error);
+// Bar chart (horizontal)
+const ctx  = $('#sentBar');  // Or change to #sentBar if you rename
+const data = { 
+  labels: Object.keys(js.counts), 
+  datasets: [{ 
+    data: Object.values(js.counts),
+    backgroundColor: [
+      'rgba(59,130,246,0.7)',
+      'rgba(16,185,129,0.7)',
+      'rgba(236,72,153,0.7)'
+    ]
+  }] 
+};
+if (sentChart) sentChart.destroy();
+sentChart = new Chart(ctx, { 
+  type: 'bar',
+  data,
+  options: {
+    indexAxis: 'y',
+    plugins: {
+      legend: { display: false },
+      title: { display: true, text: 'Sentiment Distribution' }
+    },
+    scales: {
+      x: { title: { display: true, text: 'Count' }, beginAtZero: true },
+      y: { title: { display: true, text: 'Sentiment' } }
+    }
+  }
+});
+$('#sentViz').classList.remove('hidden');
+
+  // Word cloud images
+  const wc = (id, b64) => {
+    const el = $(id);
+    if (b64) { el.src = 'data:image/png;base64,' + b64; el.classList.remove('hidden'); }
+    else el.classList.add('hidden');
+  };
+  wc('#wcPos', js.wc_images.Positive);
+  wc('#wcNeu', js.wc_images.Neutral);
+  wc('#wcNeg', js.wc_images.Negative);
+  const dl = $('#dlLink');
+  dl.href   = js.download_url;
+  dl.classList.remove('hidden');
+  hideAnnotation('output-sent');
+  switchPanel('sent');
+  $('#output-sent').scrollIntoView({ behavior: "smooth" });
+});
+
+// FREQUENCY TREEMAP
+$('#treemapForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  showLoading();
+  switchPanel('treemap');
+
+  const n = parseInt($('#treemapForm input[name="ngram_n"]').value, 10) || 1;
+  const top_k = parseInt($('#treemapForm input[name="top_k"]').value, 10) || 50;
+  const lang = $('#treemapForm select[name="language"]').value;
+  const colorScaleSel = $('#treemapForm select[name="color_scale"]').value;
+  let colorScale = colorScaleSel;
+  if (colorScaleSel === 'custom') {
+    colorScale = $('#treemapForm input[name="color_custom"]').value
+      .split(',')
+      .map(x => x.trim())
+      .filter(Boolean);
+  }
+  const exportPng = $('#treemapForm input[name="export_png"]').checked;
+
+  // Language tokenization regex
+  const REGEX_MAP = {
+    hindi:   /[\u0900-\u097F]+/g,
+    marathi: /[\u0900-\u097F]+/g,
+    bengali: /[\u0980-\u09FF]+/g,
+    tamil:   /[\u0B80-\u0BFF]+/g,
+    telugu:  /[\u0C00-\u0C7F]+/g,
+  };
+  const regex = REGEX_MAP[lang];
+
+  let texts = [];
+  const csvFile = $('#treemapCsvInput').files[0];
+  const txtFile = $('#treemapTxtInput').files[0];
+
+  if (csvFile) {
+    const csvText = await csvFile.text();
+    const csv = Papa.parse(csvText, { header: true });
+    const col = $('#treemapCsvCol').value;
+    if (!csv.meta.fields || !csv.meta.fields.includes(col)) {
+      $('#treemapResult').innerHTML = `<span class="text-red-600">Column '${col}' not found</span>`;
+      hideLoading();
+      return;
+    }
+    texts = csv.data.map(row => (row[col] || '').toString());
+  } else if (txtFile) {
+    const txt = await txtFile.text();
+    texts = txt.split('\n').map(line => line.trim()).filter(Boolean);
+  } else {
+    $('#treemapResult').innerHTML = `<span class="text-red-600">No file uploaded.</span>`;
+    hideLoading();
+    return;
+  }
+
+  // Tokenize
+  let tokens = [];
+  texts.forEach(line => {
+    const toks = line.match(regex) || [];
+    tokens.push(...toks);
+  });
+
+  // Build n-grams
+  let ngrams = [];
+  if (n === 1) {
+    ngrams = tokens;
+  } else {
+    for (let i = 0; i <= tokens.length - n; i++) {
+      ngrams.push(tokens.slice(i, i + n).join(' '));
+    }
+  }
+
+  // Count n-grams
+  const ngramCounts = {};
+  ngrams.forEach(ng => {
+    ngramCounts[ng] = (ngramCounts[ng] || 0) + 1;
+  });
+
+  const topNgrams = Object.entries(ngramCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, top_k);
+
+  if (!topNgrams.length) {
+    $('#treemapResult').innerHTML = `<span class="text-red-600">No n-grams found in your data.</span>`;
+    hideLoading();
+    return;
+  }
+
+  // Build Plotly color scale
+  let marker = {};
+  if (Array.isArray(colorScale)) {
+    marker.colorscale = colorScale.map((c, i, arr) => [i/(arr.length-1), c]);
+  } else {
+    marker.colorscale = colorScale;
+  }
+
+  // Plot treemap
+  $('#treemapResult').innerHTML = '';
+  const plotlyData = [{
+    type: "treemap",
+    labels: topNgrams.map(x => x[0]),
+    parents: topNgrams.map(() => ""),
+    values: topNgrams.map(x => x[1]),
+    textinfo: "label+value",
+    marker
+  }];
+  const layout = {
+    title: `Top ${top_k} ${n}-grams Treemap`,
+    margin: { t: 40, l: 0, r: 0, b: 0 }
+  };
+  Plotly.newPlot('treemapResult', plotlyData, layout, {responsive: true});
+
+  // Export as PNG
+  if (exportPng) {
+    setTimeout(() => {
+      Plotly.toImage(document.getElementById('treemapResult'), {format: 'png', height: 600, width: 900})
+        .then(function(dataUrl) {
+          const link = document.createElement('a');
+          link.href = dataUrl;
+          link.download = 'treemap.png';
+          link.textContent = "Download Treemap as PNG";
+          link.className = "mt-4 text-blue-700 underline block";
+          $('#treemapResult').appendChild(link);
+        });
+    }, 1000);
+  }
+
+  $('#output-treemap').scrollIntoView({ behavior: "smooth" });
+  hideLoading();
+});
+
+// N-GRAM ANALYSIS
+$('#ngramForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  showLoading();
+  switchPanel('ngram');
+
+  const n = parseInt($('#ngramForm input[name="ngram_n"]').value, 10) || 2;
+  const top_k = parseInt($('#ngramForm input[name="top_k"]').value, 10) || 20;
+  const lang = $('#ngramForm select[name="language"]').value;
+
+  // Get all stopwords (default + user)
+  const stopwords = await getCombinedStopwords('#ngramForm', lang);
+
+  const REGEX_MAP = {
+    hindi:   /[\u0900-\u097F]+/g,
+    marathi: /[\u0900-\u097F]+/g,
+    bengali: /[\u0980-\u09FF]+/g,
+    tamil:   /[\u0B80-\u0BFF]+/g,
+    telugu:  /[\u0C00-\u0C7F]+/g,
+  };
+  const regex = REGEX_MAP[lang];
+
+  let texts = [];
+  const csvFile = $('#ngramCsvInput').files[0];
+  const txtFile = $('#ngramTxtInput').files[0];
+
+  if (csvFile) {
+    const csvText = await csvFile.text();
+    const csv = Papa.parse(csvText, { header: true });
+    const col = $('#ngramCsvCol').value;
+    if (!csv.meta.fields || !csv.meta.fields.includes(col)) {
+      $('#ngramResult').innerHTML = `<span class="text-red-600">Column '${col}' not found</span>`;
+      hideLoading();
+      return;
+    }
+    texts = csv.data.map(row => (row[col] || '').toString());
+  } else if (txtFile) {
+    const txt = await txtFile.text();
+    texts = txt.split('\n').map(line => line.trim()).filter(Boolean);
+  } else {
+    $('#ngramResult').innerHTML = `<span class="text-red-600">No file uploaded.</span>`;
+    hideLoading();
+    return;
+  }
+
+  let tokens = [];
+  texts.forEach(line => {
+    tokens.push(...(line.match(regex) || []));
+  });
+
+  // Remove stopwords
+  tokens = tokens.filter(tok => !stopwords.includes(tok));
+
+  let ngrams = [];
+  for (let i = 0; i <= tokens.length - n; i++) {
+    ngrams.push(tokens.slice(i, i + n).join(' '));
+  }
+
+  const ngramCounts = {};
+  ngrams.forEach(ng => {
+    ngramCounts[ng] = (ngramCounts[ng] || 0) + 1;
+  });
+
+  const topNgrams = Object.entries(ngramCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, top_k);
+
+  if (!topNgrams.length) {
+    $('#ngramResult').innerHTML = `<span class="text-red-600">No ${n}-grams found in your data after stopword removal.</span>`;
+    hideLoading();
+    return;
+  }
+
+  $('#ngramResult').innerHTML = '';
+  Plotly.newPlot('ngramResult', [{
+    x: topNgrams.map(x => x[1]).reverse(),
+    y: topNgrams.map(x => x[0]).reverse(),
+    type: 'bar',
+    orientation: 'h',
+    marker: { color: 'rgba(54, 162, 235, 0.7)' }
+  }], {
+    title: `Top ${top_k} ${n}-grams`,
+    xaxis: { title: 'Frequency' },
+    yaxis: { title: `${n}-gram` },
+    margin: { l: 120, r: 40, t: 50, b: 50 }
+  }, {responsive: true});
+
+  $('#output-ngram').scrollIntoView({ behavior: "smooth" });
+  hideLoading();
+});
+
+// Find Best #Topics (Coherence Sweep)
+$('#findBestTopicsBtn').addEventListener('click', async function () {
+  showLoading();
+
+  // Get the min/max range values
+  const minK = parseInt($('#topicRangeMin').value, 10) || 2;
+  const maxK = parseInt($('#topicRangeMax').value, 10) || 10;
+
+  // Prepare FormData similar to normal topic modeling submit
+  const form = $('#tmForm');
+  const formData = new FormData();
+
+  // Copy files
+  const csvFile = $('#tmCsvInput').files[0];
+  const txtFile = $('#tmTxtInput').files[0];
+  if (csvFile) {
+    formData.append('csv_file', csvFile);
+    formData.append('csv_column', $('#tmCsvCol').value);
+  } else if (txtFile) {
+    formData.append('text_file', txtFile);
+  } else {
+    hideLoading();
+    alert('Please upload a CSV or text file.');
+    return;
+  }
+
+  // Add all relevant parameters
+  formData.append('tm_language', form.tm_language.value);
+  formData.append('model_type', $('#tm-model-type').value);
+  formData.append('passes', form.passes.value);
+  formData.append('min_freq', form.min_freq.value);
+  formData.append('max_ratio', form.max_ratio.value);
+
+  // Add range params for sweep
+  formData.append('range_min', minK);
+  formData.append('range_max', maxK);
+
+  // Fetch backend
+  let js;
+  try {
+    const res = await fetch('/topic_model', { method: 'POST', body: formData });
+    js = await res.json();
+  } catch (e) {
+    hideLoading();
+    alert('Server error: ' + e);
+    return;
+  }
+  hideLoading();
+
+  // Handle error
+  if (js.error) {
+    alert(js.error);
+    return;
+  }
+  if (!js.topic_counts || !js.coherences) {
+    alert("Unexpected server response.");
+    return;
+  }
+
+  // Plot with Plotly
+  $('#topicCoherencePlot').innerHTML = ''; // Clear old plot
+  Plotly.newPlot('topicCoherencePlot', [{
+    x: js.topic_counts,
+    y: js.coherences,
+    mode: 'lines+markers',
+    line: { shape: 'spline' },
+    marker: { size: 8 },
+    name: 'Coherence'
+  }], {
+    title: 'Topic Number vs. Coherence',
+    xaxis: { title: 'Number of Topics' },
+    yaxis: { title: 'Coherence Score' },
+    margin: { t: 40, l: 50, r: 30, b: 50 }
+  }, { responsive: true });
+
+  // Scroll to the plot area
+  $('#topicCoherencePlot').scrollIntoView({ behavior: "smooth" });
+});
+
+
+// Show/hide the custom color input for treemap
+document.querySelector('select[name="color_scale"]').addEventListener('change', function() {
+  const custom = this.value === 'custom';
+  document.getElementById('treemapCustomColorInput').classList.toggle('hidden', !custom);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+Flask
+scikit-learn
+gensim
+numpy
+matplotlib
+wordcloud
+pandas
+deep-translator
+textblob
+vaderSentiment
