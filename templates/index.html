@@ -59,7 +59,7 @@
 <body class="bg-gray-100 text-gray-800 h-screen overflow-hidden">
 <!-- Welcome Overlay -->
 <div id="welcomeOverlay"
-     class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 transition-opacity duration-500">
+     class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-100 via-blue-300 to-blue-400 transition-opacity duration-500">
   <div class="bg-white/90 rounded-2xl shadow-2xl px-8 py-8 max-w-lg w-full text-center border border-blue-200 relative">
     <img src="{{ url_for('static', filename='images/BharatNLP.png') }}"
          alt="Bharat NLP logo"
@@ -973,8 +973,7 @@ $('#ngramForm').addEventListener('submit', async function(e) {
     marker: { color: 'rgba(54, 162, 235, 0.7)' }
   }], {
     title: `Top ${top_k} ${n}-grams`,
-    xaxis: { title: 'Frequency' },
-    yaxis: { title: `${n}-gram` },
+    xaxis: { title: 'Frequency' },  
     margin: { l: 120, r: 40, t: 50, b: 50 }
   }, {responsive: true});
 

@@ -34,6 +34,7 @@ FONT_MAP = {
     "tamil":   "NotoSansTamil-Regular.ttf",
     "telugu":  "NotoSansTelugu-Regular.ttf",
 }
+
 REGEX_MAP = {
     "hindi":   r"[\u0900-\u097F]+",
     "marathi": r"[\u0900-\u097F]+",
