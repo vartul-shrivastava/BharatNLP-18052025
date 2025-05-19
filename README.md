@@ -1,3 +1,5 @@
+![BharatNLP Dashboard](static/images/header.jpg "BharatNLP Dashboard")
+
 # BharatNLP: A Multilingual Text Visualization and Assessment NLP Toolkit for Prominent Indian Languages
 
 A robust, browser-based toolkit for natural language processing (NLP) and visualization in Indian languages: **Hindi, Marathi, Bengali, Tamil, and Telugu**.
@@ -50,7 +52,7 @@ This could be due to active stopword filtering, the "max words" parameter, or mi
 Use the “Find Best #Topics” option under the Topic Modeling section. The toolkit automatically calculates coherence scores and suggests the best topic count.
 
 ### 8. **Can I change the visualization appearance?**
-Yes. Options are provided for changing fonts, color schemes, background, and word count for word clouds and treemaps.
+Yes. Options are provided for changing color schemes, background, and word count for word clouds and treemaps.
 
 ### 9. **Do I need programming experience to use BharatNLP?**
 No. The toolkit is designed for ease of use, with a graphical user interface requiring no coding.
