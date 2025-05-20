@@ -111,10 +111,9 @@ def generate_wordcloud():
 
 @app.route("/topic_model", methods=["POST"])
 def topic_model():
+    # ---- Step 1: File Handling ----
     csv_file = request.files.get("csv_file")
     text_file = request.files.get("text_file")
-
-    # --- Step 1: Read and normalize input as a single big string ---
     if csv_file and csv_file.filename:
         try:
             df = pd.read_csv(csv_file)
@@ -123,41 +122,33 @@ def topic_model():
         col = request.form.get("csv_column")
         if not col or col not in df.columns:
             return jsonify(error=f"Column '{col}' not found in CSV"), 400
-        lines = df[col].dropna().astype(str)
-        lines = [x.strip() for x in lines if x.strip() and x.lower().strip() != 'nan']
-        big_text = " ".join(lines)
-        if not big_text.strip():
-            return jsonify(error="No valid text found in selected CSV column."), 400
-        raw_texts = [big_text]
+        raw_texts = df[col].astype(str).tolist()
     elif text_file and text_file.filename:
-        lines = text_file.read().decode("utf-8").splitlines()
-        lines = [x.strip() for x in lines if x.strip() and x.lower().strip() != 'nan']
-        big_text = " ".join(lines)
-        if not big_text.strip():
-            return jsonify(error="No valid text found in uploaded TXT file."), 400
-        raw_texts = [big_text]
+        raw_texts = text_file.read().decode("utf-8").splitlines()
     else:
         return jsonify(error="Please upload CSV or text file."), 400
 
-    # --- Step 2: Load stopwords and language regex ---
+    # ---- Step 2: Language and Stopwords ----
     lang = request.form.get("tm_language")
     sw_path = os.path.join(STOPWORD_DIR, f"{lang}_stopwords.txt")
     if not os.path.isfile(sw_path):
         return jsonify(error=f"Missing stopwords for {lang}"), 400
     with open(sw_path, encoding="utf-8") as f:
-        stopset = set(w.strip() for w in f if w.strip())
+        stopset = set(f.read().splitlines())
     regex_range = REGEX_MAP.get(lang)
 
-    # --- Step 3: Parameters ---
+    # ---- Step 3: Parameters ----
     model_type = request.form.get("model_type", "lda").lower()
     num_topics = int(request.form.get("num_topics") or 5)
     passes     = int(request.form.get("passes") or 10)
     min_freq   = int(request.form.get("min_freq") or 5)
     max_ratio  = float(request.form.get("max_ratio") or 0.8)
-    range_min  = request.form.get("range_min")
-    range_max  = request.form.get("range_max")
 
-    # --- Step 4: Tokenizer ---
+    # For sweep mode
+    range_min = request.form.get("range_min")
+    range_max = request.form.get("range_max")
+
+    # ---- Step 4: Tokenizer ----
     def custom_tokenizer(text):
         clean = re.sub(rf"http\S+|\d+|[^\s{regex_range[1:-1]}]+", " ", text)
         clean = re.sub(r"\s+", " ", clean).strip()
@@ -165,67 +156,45 @@ def topic_model():
         tokens = [t for t in tokens if t not in stopset and len(t) > 1]
         return tokens
 
-    # Single big document as a list (corpus)
-    token_docs = [custom_tokenizer(big_text)]
-    if not token_docs or not any(token_docs[0]):
-        return jsonify(error="No valid tokens found in text."), 400
-
+    token_docs = [custom_tokenizer(line) for line in raw_texts if line.strip()]
+    if not token_docs:
+        return jsonify(error="No valid tokens found"), 400
     dictionary = corpora.Dictionary(token_docs)
     dictionary.filter_extremes(no_below=min_freq, no_above=max_ratio)
-    if len(dictionary) == 0:
-        return jsonify(error="No valid tokens left after filtering extremes. Try lowering min frequency."), 400
 
-    # --- Helper: Filter topic words to exist in dictionary ---
-    def filter_topic_words(topics, dict_words):
-        # Keep only tokens present in dictionary and skip empty topics
-        filtered = []
-        for topic in topics:
-            clean = [w for w in topic if w in dict_words]
-            if clean:
-                filtered.append(clean)
-        return filtered
-
-    # --- Step 5: Sweep mode for coherence ---
+    # ---- Step 5: If sweep mode requested ----
     if range_min and range_max:
         try:
-            topic_range = range(int(range_min), int(range_max) + 1)
+            topic_range = range(int(range_min), int(range_max)+1)
         except Exception:
             return jsonify(error="Invalid range parameters"), 400
+
         coherences = []
         for n_topics in topic_range:
+            print(f"Running {model_type} with {n_topics} topics")
             try:
                 if model_type == "lda":
                     corpus = [dictionary.doc2bow(doc) for doc in token_docs]
-                    if not any(corpus):
+                    if len(dictionary) == 0 or not any(corpus):
                         coherences.append(None)
                         continue
                     model = models.LdaModel(
                         corpus, id2word=dictionary,
                         num_topics=n_topics, passes=passes, random_state=42
                     )
-                    lda_topics = [[w for w, _ in model.show_topic(idx, topn=10)] for idx in range(n_topics)]
-                    lda_topics = filter_topic_words(lda_topics, dictionary.token2id)
-                    if not lda_topics:
-                        coherences.append(None)
-                        continue
+                    lda_topics = [ [w for w, _ in model.show_topic(idx, topn=10)] for idx in range(n_topics) ]
                     coherence = models.CoherenceModel(
                         topics=lda_topics, texts=token_docs, dictionary=dictionary, coherence="c_v"
                     ).get_coherence()
                     coherences.append(round(coherence, 4))
                 elif model_type in ["lsa", "nmf"]:
-                    from sklearn.feature_extraction.text import TfidfVectorizer
-                    from sklearn.decomposition import TruncatedSVD, NMF
                     tfidf = TfidfVectorizer(
                         analyzer='word',
                         tokenizer=custom_tokenizer,
                         preprocessor=None,
-                        token_pattern=None,
-                        vocabulary=list(dictionary.token2id.keys())
+                        token_pattern=None
                     )
                     X = tfidf.fit_transform(raw_texts)
-                    if X.shape[1] == 0:
-                        coherences.append(None)
-                        continue
                     if model_type == "lsa":
                         svd = TruncatedSVD(n_components=n_topics, random_state=42)
                         H = svd.fit(X).components_
@@ -233,124 +202,92 @@ def topic_model():
                         nmf = NMF(n_components=n_topics, random_state=42)
                         H = nmf.fit(X).components_
                     terms = tfidf.get_feature_names_out()
-                    topics = [
-                        [terms[i] for i in comp.argsort()[:-11:-1]]
-                        for comp in H
-                    ]
-                    topics = filter_topic_words(topics, dictionary.token2id)
-                    if not topics:
-                        coherences.append(None)
-                        continue
+                    topics = [[terms[i] for i in comp.argsort()[:-11:-1]] for comp in H]
                     coherence = models.CoherenceModel(
                         topics=topics, texts=token_docs, dictionary=dictionary, coherence="c_v"
                     ).get_coherence()
                     coherences.append(round(coherence, 4))
                 else:
                     coherences.append(None)
-            except Exception as ex:
-                print(f"Sweep error for {model_type} with {n_topics}:", ex)
+            except Exception:
                 coherences.append(None)
         return jsonify(
-            topic_counts=list(topic_range),
-            coherences=coherences
+            topic_counts = list(topic_range),
+            coherences   = coherences
         )
 
-    # --- Step 6: Single model run ---
+    # ---- Step 6: Default behavior (single model run) ----
     if model_type == "lda":
         corpus = [dictionary.doc2bow(doc) for doc in token_docs]
-        if not any(corpus):
+        if len(dictionary) == 0 or not any(corpus):
             return jsonify(error="No valid tokens after filtering."), 400
         model = models.LdaModel(
             corpus, id2word=dictionary,
-            num_topics=num_topics, passes=passes, random_state=42
+            num_topics=num_topics, passes=passes,
+            random_state=42
         )
-        lda_topics = [[w for w, _ in model.show_topic(idx, topn=10)] for idx in range(num_topics)]
-        lda_topics = filter_topic_words(lda_topics, dictionary.token2id)
-        if not lda_topics:
-            return jsonify(error="No valid topics found for coherence computation."), 400
+        lda_topics = [ [w for w, _ in model.show_topic(idx, topn=10)] for idx in range(num_topics) ]
         coherence = models.CoherenceModel(
             topics=lda_topics, texts=token_docs, dictionary=dictionary, coherence="c_v"
         ).get_coherence()
         perplexity = model.log_perplexity(corpus)
-        display_topics = [{"idx": idx, "words": ", ".join(lda_topics[idx])} for idx in range(len(lda_topics))]
+        display_topics = [{"idx": idx, "words": ", ".join(lda_topics[idx])} for idx in range(num_topics)]
         return jsonify(
-            coherence=round(coherence, 4),
-            perplexity=round(perplexity, 4),
-            topics=display_topics,
-            treemap=None,
-            model_type="lda"
+            coherence   = round(coherence, 4),
+            perplexity  = round(perplexity, 4),
+            topics      = display_topics,
+            treemap     = None,
+            model_type  = "lda"
         )
     elif model_type == "lsa":
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        from sklearn.decomposition import TruncatedSVD
         tfidf = TfidfVectorizer(
             analyzer='word',
             tokenizer=custom_tokenizer,
             preprocessor=None,
-            token_pattern=None,
-            vocabulary=list(dictionary.token2id.keys())
+            token_pattern=None
         )
         X = tfidf.fit_transform(raw_texts)
-        if X.shape[1] == 0:
-            return jsonify(error="No valid features extracted from data. Try adjusting your stopwords or min_freq."), 400
         svd = TruncatedSVD(n_components=num_topics, random_state=42)
         H = svd.fit(X).components_
         terms = tfidf.get_feature_names_out()
-        lsa_topics = [
-            [terms[i] for i in comp.argsort()[:-11:-1]]
-            for comp in H
-        ]
-        lsa_topics = filter_topic_words(lsa_topics, dictionary.token2id)
-        if not lsa_topics:
-            return jsonify(error="No valid topics found for coherence computation."), 400
+        lsa_topics = [[terms[i] for i in comp.argsort()[:-11:-1]] for comp in H]
         coherence = models.CoherenceModel(
             topics=lsa_topics, texts=token_docs, dictionary=dictionary, coherence="c_v"
         ).get_coherence()
         explained_var = svd.explained_variance_ratio_.sum()
-        display_topics = [{"idx": idx, "words": ", ".join(lsa_topics[idx])} for idx in range(len(lsa_topics))]
+        display_topics = [{"idx": idx, "words": ", ".join(lsa_topics[idx])} for idx in range(num_topics)]
         return jsonify(
-            coherence=round(coherence, 4),
-            perplexity=None,
-            topics=display_topics,
-            treemap=None,
-            model_type="lsa",
-            explained_variance=round(explained_var, 4)
+            coherence = round(coherence, 4),
+            perplexity = None,
+            topics = display_topics,
+            treemap = None,
+            model_type = "lsa",
+            explained_variance = round(explained_var, 4)
         )
     elif model_type == "nmf":
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        from sklearn.decomposition import NMF
         tfidf = TfidfVectorizer(
             analyzer='word',
             tokenizer=custom_tokenizer,
             preprocessor=None,
-            token_pattern=None,
-            vocabulary=list(dictionary.token2id.keys())
+            token_pattern=None
         )
         X = tfidf.fit_transform(raw_texts)
-        if X.shape[1] == 0:
-            return jsonify(error="No valid features extracted from data. Try adjusting your stopwords or min_freq."), 400
         nmf = NMF(n_components=num_topics, random_state=42)
         H = nmf.fit(X).components_
         terms = tfidf.get_feature_names_out()
-        nmf_topics = [
-            [terms[i] for i in comp.argsort()[:-11:-1]]
-            for comp in H
-        ]
-        nmf_topics = filter_topic_words(nmf_topics, dictionary.token2id)
-        if not nmf_topics:
-            return jsonify(error="No valid topics found for coherence computation."), 400
+        nmf_topics = [[terms[i] for i in comp.argsort()[:-11:-1]] for comp in H]
         coherence = models.CoherenceModel(
             topics=nmf_topics, texts=token_docs, dictionary=dictionary, coherence="c_v"
         ).get_coherence()
         reconstruction_err = nmf.reconstruction_err_
-        display_topics = [{"idx": idx, "words": ", ".join(nmf_topics[idx])} for idx in range(len(nmf_topics))]
+        display_topics = [{"idx": idx, "words": ", ".join(nmf_topics[idx])} for idx in range(num_topics)]
         return jsonify(
-            coherence=round(coherence, 4),
-            perplexity=None,
-            topics=display_topics,
-            treemap=None,
-            model_type="nmf",
-            reconstruction_err=round(reconstruction_err, 4)
+            coherence = round(coherence, 4),
+            perplexity = None,
+            topics = display_topics,
+            treemap = None,
+            model_type = "nmf",
+            reconstruction_err = round(reconstruction_err, 4)
         )
     else:
         return jsonify(error="Unsupported model type"), 400
